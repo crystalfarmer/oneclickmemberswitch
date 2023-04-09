@@ -1,0 +1,207 @@
+function onOpen(){
+  var ui = SpreadsheetApp.getUi();
+  
+    ui.createMenu('Switch')
+      .addItem('One Click from Cust ID', 'oneClick')
+      .addItem('One Click from Email', 'oneClickEmail')
+      .addItem('Add Key', 'getSecret')
+      .addToUi();
+}
+
+function getSecret(){
+//get Consumer Secret
+  var ui = SpreadsheetApp.getUi();
+  var documentProperties = PropertiesService.getDocumentProperties();
+  var scriptValue = ui.prompt('Consumer Secret' , ui.ButtonSet.OK);
+  documentProperties.setProperty('apikey', scriptValue.getResponseText());
+  var secret = documentProperties.getProperty('apikey');
+  return secret;
+}
+
+
+function oneClickEmail() {
+  secret = "cs_bdc9e201afb43e71c5d1fc8a10bf023fda1892a7" //change this to getSecret();
+  //Logger.log(secret);
+  //read the email address and convert to customer ID
+  email = readCell();
+  var idList = [];
+  idList = findCustomerID(email,secret);  
+  
+  var id = String(idList[0][1]);
+  getSubs(secret,id);
+  updateSubs(secret);
+  getSubs(secret,id);
+ 
+}
+//from Customer ID
+function oneClick() {
+  secret = "cs_bdc9e201afb43e71c5d1fc8a10bf023fda1892a7" //change this to getSecret();
+  id = readCell();
+  getSubs(secret,id);
+  updateSubs(secret);
+  getSubs(secret,id);
+ 
+}
+
+
+function getSubs(secret,id){
+  //call API
+  
+  var headers = {	
+    "Authorization" : "Basic " + Utilities.base64Encode(CON_KEY)+ ':'+ secret 
+  }; 
+  var options = {
+    'method': 'get',
+    'headers': headers,
+    "contentType" : "application/json",
+    'muteHttpExceptions': false
+  }
+
+  //pull their subscriptions
+  var apiHost = 'https://www.ic.org/wp-json'; 
+  url = apiHost + '/wc/v3/subscriptions?customer='+ id + '&consumer_key='+ CON_KEY + '&consumer_secret='+ secret; 
+  
+  try {
+      var response = UrlFetchApp.fetch(url, options);
+      var subs = JSON.parse(response);
+      var subList = [];
+        
+       for (var i = 0; i < subs.length; i++) {
+        
+        subList.push([
+          subs[i]["id"],
+          subs[i]["status"],
+          subs[i]["total"],
+          subs[i]["line_items"][i]["sku"],
+          subs[i]["next_payment_date_gmt"]
+        ]);
+       }
+       Logger.log("Subscription Info: "+ subList);
+  }
+
+    catch(error) {
+    var result = (error.toString());
+    showError(result)
+    Logger.log(result);
+    }
+
+  //add the current subscription to the spreadsheet
+  try{
+    var spreadsheet = SpreadsheetApp.getActive();
+    var sheet = spreadsheet.getActiveSheet();
+    var row = sheet.getActiveRange().getRowIndex();
+    var setID = sheet.getRange(row, 4, subList.length,5);
+    setID.setValues(subList);
+  }
+    catch(error){
+      result = "Error Adding Subscription Info";
+      showError(result)
+    }
+}
+
+function updateSubs(secret){
+  //get the subscription id
+  var spreadsheet = SpreadsheetApp.getActive();
+  var sheet = spreadsheet.getActiveSheet();
+  var row = sheet.getActiveRange().getRowIndex();
+  var subID = sheet.getRange(row,4,1,1).getValues();
+
+  //if (!isNaN(parseFloat(subID)) && isFinite(subID)) { Logger.log("Is a number")}
+  //  else {Logger.log("Is not a number")};
+  Logger.log("Subscription ID: "+ subID);
+
+  //load the new status
+  var newstatus = {
+    'status' : 'active'
+  }
+  var headers = {	
+    "Authorization" : "Basic " + Utilities.base64Encode(CON_KEY)+ ':'+ secret 
+  }; 
+  var options = {
+    'method': 'put',
+    'headers': headers,
+    "contentType" : "application/json",
+    'muteHttpExceptions': false,
+    'payload' : JSON.stringify(newstatus)
+  }
+
+  var apiHost = 'https://www.ic.org/wp-json'; 
+  url = apiHost + '/wc/v3/subscriptions/' + subID + '?per_page=10&consumer_key='+ CON_KEY + '&consumer_secret='+ secret; 
+
+  try {
+      var response = UrlFetchApp.fetch(url, options);
+      var newstatusupdate = JSON.parse(response);
+      //Logger.log(newstatusupdate);
+  }
+  
+  catch(error) {
+    var result = (error.toString());
+    Logger.log(result);
+    showError(result)
+    return 0;
+    }
+}
+
+function readCell(cell){
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('Subscriptions');
+    var cell = sheet.getActiveCell().getValue();
+    
+   //Logger.log("Selected Cell: " + cell);
+    return cell;
+  }
+
+function findCustomerID(email,secret){
+  //call API
+  var headers = {	
+    "Authorization" : "Basic " + Utilities.base64Encode(CON_KEY)+ ':'+ secret 
+  }; 
+  var options = {
+    'method': 'get',
+    'headers': headers,
+    "contentType" : "application/json",
+    'muteHttpExceptions': false
+  }
+  
+  var apiHost = 'https://www.ic.org/wp-json'; 
+  url = apiHost + '/wc/v3/customers?email=' + email +'&per_page=10'+ '&consumer_key='+ CON_KEY + '&consumer_secret='+ secret;
+
+  try {
+      var response = UrlFetchApp.fetch(url, options);
+      var id = JSON.parse(response);
+      //Logger.log("Response: " + response); 
+      var idList = [];
+    
+       for (var i = 0; i < id.length; i++) {
+        
+        idList.push([
+          id[i]["email"],
+          id[i]["id"]
+        ]);
+       }
+       ;
+      Logger.log("Results " + idList); 
+  
+    var spreadsheet = SpreadsheetApp.getActive();
+    var sheet = spreadsheet.getActiveSheet();
+    var row = sheet.getActiveRange().getRowIndex();
+    var setID = sheet.getRange(row, 2, idList.length,2);
+    setID.setValues(idList);
+    //Logger.log(id);
+  
+  }
+    catch(error) {
+    var result = (error.toString());
+    Logger.log(result);
+    showError(result)
+    return 0;
+    }
+  
+  return idList;
+  }
+
+function showError(result){
+  var ui = SpreadsheetApp.getUi();
+  ui.alert('Error: ' + result , ui.ButtonSet.OK);
+  return
+}
