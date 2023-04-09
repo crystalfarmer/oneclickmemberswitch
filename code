@@ -20,7 +20,7 @@ function getSecret(){
 
 
 function oneClickEmail() {
-  secret = "cs_bdc9e201afb43e71c5d1fc8a10bf023fda1892a7" //change this to getSecret();
+  getSecret();
   //Logger.log(secret);
   //read the email address and convert to customer ID
   email = readCell();
@@ -35,7 +35,7 @@ function oneClickEmail() {
 }
 //from Customer ID
 function oneClick() {
-  secret = "cs_bdc9e201afb43e71c5d1fc8a10bf023fda1892a7" //change this to getSecret();
+  getSecret();
   id = readCell();
   getSubs(secret,id);
   updateSubs(secret);
